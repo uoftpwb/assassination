@@ -34,7 +34,7 @@ events <- read_csv("Raw Data/Country Coding.csv")%>%
   left_join(survey_dates, by=c("country_code", "year")) %>%  #combine survey and event dates
   mutate(before_survey = survey_date>event_date)%>%  #check if survey occurred before event to determine when to begin the year selection
   mutate(start_year = if_else(before_survey, year-3, year-2))%>% # determine the first of the six years to extract from gallup data
-  mutate(event_id=row_number()) # creates an id for each event, which will be useful in the case of multiple events in the same country
+  mutate(event_id=factor(row_number())) # creates an id for each event, which will be useful in the case of multiple events in the same country
 
 # IN ORDER TO SELECT THE REQUIRED YEARS of REQUIRED COUNTRIES from GALLUP and CODE THEM WITH EVENT IDENTIFIERS
 # I make a new dataframe based on the data in 'events' which includes a row for each country and year combination needed
@@ -79,8 +79,8 @@ assas <- left_join(event_dataframe, assasraw, by=c("country_code", "year"))%>%
 
 # 1. Life Satisfaction Yearly Model
 
-ls.model <- lmer(lifesat ~ year_number*event_id + (after|event_id) + (year_after|event_id), assas, weight=wgt)
-
+ls.model <- lmer(ls ~ year_number*event_id + (after|event_id) + (year_after|event_id), assas, weight=weight)
+summary(ls.model)
 
 # 2. Life Satisfaction Moderated by Survey Delay
 # 'delay' is a variable that counts the days between the event and the survey
