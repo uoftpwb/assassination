@@ -33,8 +33,8 @@ events <- read_csv("Raw Data/Country Coding.csv")%>%
   select(-gallup_availability) %>%
   left_join(survey_dates, by=c("country_code", "year")) %>%  #combine survey and event dates
   mutate(before_survey = survey_date>event_date)%>%  #check if survey occurred before event to determine when to begin the year selection
-  mutate(start_year = if_else(before_survey, year-2, year-3)) # determine the first of the six years to extract from gallup data
-
+  mutate(start_year = if_else(before_survey, year-3, year-2))%>% # determine the first of the six years to extract from gallup data
+  mutate(event_id=row_number()) # creates an id for each event, which will be useful in the case of multiple events in the same country
 
 # IN ORDER TO SELECT THE REQUIRED YEARS of REQUIRED COUNTRIES from GALLUP and CODE THEM WITH EVENT IDENTIFIERS
 # I make a new dataframe based on the data in 'events' which includes a row for each country and year combination needed
@@ -50,12 +50,11 @@ for(i in 1:nrow(events)){
                                 country = rep(row$country, 6),
                                 country_code = rep(row$country_code, 6),
                                 country_code_c = rep(row$country_code_c, 6),
+                                event_date = rep(row$event_date, 6),
                                 event_year = rep(row$year, 6),
-                                before_survey = rep(row$before_survey, 6),
+                                start_year = rep(row$start_year,6),
                                 year = row$start_year:(row$start_year+5),
-                                year_number = 1:6,
-                                after = c(0,0,0,1,1,1),
-                                year_after = c(0,0,0,1,2,3))
+                                after = c(0,0,0,1,1,1))
 }
 
 event_dataframe <- do.call(rbind,event_dataframes) # now bind all dataframes into a single dataframe
@@ -66,8 +65,9 @@ event_dataframe <- do.call(rbind,event_dataframes) # now bind all dataframes int
 
 assas <- left_join(event_dataframe, assasraw, by=c("country_code", "year"))%>%
   select(-country.y, -country_code_c.y, -YEAR_CALENDAR, -`...1`) %>%
-  rename(country=country.x, country_code_c=country_code_c.x, weight=WGT)
-
+  rename(country=country.x, country_code_c=country_code_c.x, weight=WGT) %>%
+  mutate(year_number = as.numeric(interval(event_date, survey_date), 'years')) %>%
+  mutate(year_after = if_else(after==1,as.numeric(interval(event_date, survey_date), 'years'), 0))
 
 
 ### PAST HERE IS ***UNDER DEVELOPMENT*** 
