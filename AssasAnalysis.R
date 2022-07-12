@@ -7,7 +7,7 @@ library(gee)
 library(geepack)
 library(ggplot2)
 library(rio)
-
+library(texreg)
 
 ##################### DATA CLEANING AND SETUP ############################
 
@@ -111,8 +111,9 @@ assas <- assas %>% left_join(., country, by = c("country_code","year"))
 
 #DATA PROCESSING creating standardized country-level covariates
 #GDP is log2 transformed to account for diminishing return
-temp <- assas %>% mutate(loggdp_z = scale(log2(gdp))[,1],
-                          conflict_z = scale(conflict)[,1])
+assas <- assas %>% ungroup() %>% 
+  mutate(loggdp_z = scale(log2(gdp))[,1],
+         conflict_z = scale(conflict)[,1])
 
 #DATA PROCESSING country-mean centering the DVs so that our results focus on changes in SWB
 assas <- assas %>% group_by(country) %>% 
@@ -131,8 +132,34 @@ assas <- assas %>% group_by(country) %>%
 
 # 1. Life Satisfaction Yearly Model
 
-ls.model <- lmer(ls ~ year_number + after + year_after + (after|event_id) + (year_after|event_id), assas, weight=weight)
+ls.model <- lmer(ls ~ year_number + after + year_after + loggdp_z + conflict_z + 
+                   (after + year_after|event_id), assas, weight=weight,
+                 control=lmerControl(optimizer="bobyqa",
+                                      optCtrl=list(maxfun=2e5)))
 summary(ls.model)
+
+hope.model <- lmer(hope ~ year_number + after + year_after + loggdp_z + conflict_z + 
+                   (after + year_after|event_id), assas, weight=weight,
+                 control=lmerControl(optimizer="bobyqa",
+                                     optCtrl=list(maxfun=2e5)))
+summary(hope.model)
+
+pa.model <- lmer(pa ~ year_number + after + year_after + loggdp_z + conflict_z + 
+                   (after + year_after|event_id), assas, weight=weight,
+                 control=lmerControl(optimizer="bobyqa",
+                                     optCtrl=list(maxfun=2e5)))
+summary(pa.model)
+
+na.model <- lmer(na ~ year_number + after + year_after + loggdp_z + conflict_z + 
+                   (after + year_after|event_id), assas, weight=weight,
+                 control=lmerControl(optimizer="bobyqa",
+                                     optCtrl=list(maxfun=2e5)))
+summary(na.model)
+
+htmlreg(list(ls.model, hope.model, pa.model, na.model), file = "results.doc", 
+        inline.css = FALSE, doctype = TRUE, html.tag = TRUE, 
+        head.tag = TRUE, body.tag = TRUE,
+        custom.model.names = c('Life Satisfaction','Hope','Pos. Affect', 'Neg. Affect'))
 
 # 2. Life Satisfaction Moderated by Survey Delay
 # 'delay' is a variable that counts the days between the event and the survey
@@ -248,4 +275,3 @@ na.plot <- agg[!is.na(agg$na),] %>%
   ylab("Negative Affect")
 
 ggsave("na.png", width = 15, height = 30, units = "cm")
-
