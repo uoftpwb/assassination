@@ -1,6 +1,11 @@
 library(tidyverse)
 library(countrycode)
 library(lubridate)
+library(lme4)
+library(lmerTest)
+library(gee)
+library(geepack)
+library(ggplot2)
 
 ##################### DATA CLEANING AND SETUP ############################
 
@@ -34,8 +39,9 @@ events <- read_csv("Raw Data/Country Coding.csv")%>%
   left_join(survey_dates, by=c("country_code", "year")) %>%  #combine survey and event dates
   mutate(before_survey = survey_date>event_date)%>%  #check if survey occurred before event to determine when to begin the year selection
   mutate(start_year = if_else(before_survey, year-3, year-2))%>% # determine the first of the six years to extract from gallup data
+  filter(country_code != 275) %>% filter(country_code != 608) %>% #Remove Palestine and Philippines (more than 1 assassination in a year)
   mutate(event_id=factor(row_number())) # creates an id for each event, which will be useful in the case of multiple events in the same country
-
+  
 # IN ORDER TO SELECT THE REQUIRED YEARS of REQUIRED COUNTRIES from GALLUP and CODE THEM WITH EVENT IDENTIFIERS
 # I make a new dataframe based on the data in 'events' which includes a row for each country and year combination needed
 # in the six year study intervals. 
@@ -79,7 +85,7 @@ assas <- left_join(event_dataframe, assasraw, by=c("country_code", "year"))%>%
 
 # 1. Life Satisfaction Yearly Model
 
-ls.model <- lmer(ls ~ year_number*event_id + (after|event_id) + (year_after|event_id), assas, weight=weight)
+ls.model <- lmer(ls ~ year_number + after + year_after + (after|event_id) + (year_after|event_id), assas, weight=weight)
 summary(ls.model)
 
 # 2. Life Satisfaction Moderated by Survey Delay
@@ -110,3 +116,89 @@ ls.delay.model <- lmer(lifesat ~ year_number*event_id + (after|event_id) + (dela
 # factors controls in the Pearl-ian sense: they are causal of 'day_after' and 'life satisfaction'.
 
 ls.daily.model <- lmer(lifesat ~ day_number*event_id + (after|event_id) + (day_after|event_id) + gender + age + employment + marriage + region, assas, weight=wgt)
+
+
+############################ GEE Analysis by FC #################################
+#Given the non-convergence, I decided to try a GEE to account for the longitudinal nature of the data.
+
+ls.gee <- geeglm(ls ~ year_number + after + year_after,
+              data = assas, 
+              id = event_id,
+              corstr = "exchangeable")
+summary(ls.gee)
+
+
+########################### Plot ################################################
+#Create an aggregated-level dataset for plotting
+agg <- assas %>% 
+  group_by(country, year_number) %>% 
+  summarise(n = n(),
+            ls = weighted.mean(ls, weight, na.rm = T),
+            hope = weighted.mean(hope, weight, na.rm = T),
+            pa = weighted.mean(pa, weight, na.rm = T),
+            na = weighted.mean(na, weight, na.rm = T))
+
+#Plot ls over time for each country
+ls.plot <- agg %>% 
+  ggplot(aes(x = year_number, y = ls)) +
+  geom_point() +
+  geom_line() + 
+  geom_vline(xintercept = 0, linetype="dotted", color = "blue") +
+  facet_wrap(~country, ncol = 3) +
+  theme_classic() +
+  theme(text = element_text(size=16),
+        axis.title.y = element_text(margin = margin(t = 0, r = 20, b = 0, l = 0)),
+        axis.title.x = element_text(margin = margin(t = 20, r = , b = 0, l = 0))) +
+  xlab("Year to Event") +
+  ylab("Life Satisfaction")
+
+ggsave("ls.png", width = 15, height = 30, units = "cm")
+
+#Plot hope over time for each country
+hope.plot <- agg %>% 
+  ggplot(aes(x = year_number, y = hope)) +
+  geom_point() +
+  geom_line() + 
+  geom_vline(xintercept = 0, linetype="dotted", color = "blue") +
+  facet_wrap(~country, ncol = 3) +
+  theme_classic() +
+  theme(text = element_text(size=16),
+        axis.title.y = element_text(margin = margin(t = 0, r = 20, b = 0, l = 0)),
+        axis.title.x = element_text(margin = margin(t = 20, r = , b = 0, l = 0))) +
+  xlab("Year to Event") +
+  ylab("Hope")
+
+ggsave("hope.png", width = 15, height = 30, units = "cm")
+
+#Plot pa over time for each country
+pa.plot <- agg[!is.na(agg$pa),] %>% 
+  ggplot(aes(x = year_number, y = pa)) +
+  geom_point() +
+  geom_line() + 
+  geom_vline(xintercept = 0, linetype="dotted", color = "blue") +
+  facet_wrap(~country, ncol = 3) +
+  theme_classic() +
+  theme(text = element_text(size=16),
+        axis.title.y = element_text(margin = margin(t = 0, r = 20, b = 0, l = 0)),
+        axis.title.x = element_text(margin = margin(t = 20, r = , b = 0, l = 0))) +
+  xlab("Year to Event") +
+  ylab("Positive Affect")
+
+ggsave("pa.png", width = 15, height = 30, units = "cm")
+
+#Plot na over time for each country
+na.plot <- agg[!is.na(agg$na),] %>% 
+  ggplot(aes(x = year_number, y = na)) +
+  geom_point() +
+  geom_line() + 
+  geom_vline(xintercept = 0, linetype="dotted", color = "blue") +
+  facet_wrap(~country, ncol = 3) +
+  theme_classic() +
+  theme(text = element_text(size=16),
+        axis.title.y = element_text(margin = margin(t = 0, r = 20, b = 0, l = 0)),
+        axis.title.x = element_text(margin = margin(t = 20, r = , b = 0, l = 0))) +
+  xlab("Year to Event") +
+  ylab("Negative Affect")
+
+ggsave("na.png", width = 15, height = 30, units = "cm")
+
