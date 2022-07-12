@@ -7,6 +7,7 @@ library(gee)
 library(geepack)
 library(ggplot2)
 
+
 ##################### DATA CLEANING AND SETUP ############################
 
 ## IMPORT GALLUP DATA and standardize dates and country codes
@@ -122,8 +123,9 @@ ls.daily.model <- lmer(lifesat ~ day_number*event_id + (after|event_id) + (day_a
 #Given the non-convergence, I decided to try a GEE to account for the longitudinal nature of the data.
 
 ls.gee <- geeglm(ls ~ year_number + after + year_after,
-              data = assas, 
               id = event_id,
+              weights = weight,
+              data = assas,
               corstr = "exchangeable")
 summary(ls.gee)
 
