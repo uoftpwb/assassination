@@ -6,6 +6,7 @@ library(lmerTest)
 library(gee)
 library(geepack)
 library(ggplot2)
+library(rio)
 
 
 ##################### DATA CLEANING AND SETUP ############################
@@ -35,7 +36,7 @@ events <- read_csv("Raw Data/Country Coding.csv")%>%
   mutate(country_code = countrycode(country, origin="country.name", 
                                       destination="iso3n", warn=TRUE, nomatch=NULL,
                                     custom_match=c("Azerbaijan"="031", "Kosovo"="926")))%>%
-  mutate(event_date=ymd(event_date)) %>%
+  mutate(event_date=mdy(event_date)) %>%
   select(-gallup_availability) %>%
   left_join(survey_dates, by=c("country_code", "year")) %>%  #combine survey and event dates
   mutate(before_survey = survey_date>event_date)%>%  #check if survey occurred before event to determine when to begin the year selection
@@ -75,6 +76,50 @@ assas <- left_join(event_dataframe, assasraw, by=c("country_code", "year"))%>%
   rename(country=country.x, country_code_c=country_code_c.x, weight=WGT) %>%
   mutate(year_number = as.numeric(interval(event_date, survey_date), 'years')) %>%
   mutate(year_after = if_else(after==1,as.numeric(interval(event_date, survey_date), 'years'), 0))
+
+## IMPORT CNTS DATA
+cnts <- import("Raw Data/2021 Edition CNTSDATA.xlsx", skip = 1)
+
+#extracting the domestic conflict variable
+#getting country codes to facilitate merging
+
+cntsa <- cnts %>% select(year, country, domestic9) %>% 
+  mutate(country_code = countrycode(country, origin="country.name", 
+                                    destination="iso3n", warn=TRUE, nomatch=NULL,
+                                    custom_match=c("Azerbaijan"="031", "Kosovo"="926"))) %>% 
+  select(-country)
+
+#getting pre-event conflict data
+merged <- assas %>% left_join(., cntsa, by = c("country_code", "year"))
+merged_before <- merged %>% filter(after == 0) %>% 
+  group_by(country_code) %>% 
+  summarize(conflict = mean(domestic9, na.rm=T))
+
+#MERGE CNTS pre-event conflict data back to the assas object
+assas <- assas %>% left_join(., merged_before)
+
+##IMPORT GDP and V-DEM data
+country <- import("Raw Data/GDPandLDI.xlsx") %>% 
+  select(country = "Country Name", year = Year, gdp = GDPperCapPPP, dem = v2x_libdem) %>% 
+  mutate(country_code = countrycode(country, origin="country.name", 
+                                    destination="iso3n", warn=TRUE, nomatch=NULL,
+                                    custom_match=c("Azerbaijan"="031", "Kosovo"="926","Turkiye" = "792"))) %>% 
+  select(-country)
+
+#MERGE country-level covariates to assas data
+assas <- assas %>% left_join(., country, by = c("country_code","year"))
+
+#DATA PROCESSING creating standardized country-level covariates
+#GDP is log2 transformed to account for diminishing return
+temp <- assas %>% mutate(loggdp_z = scale(log2(gdp))[,1],
+                          conflict_z = scale(conflict)[,1])
+
+#DATA PROCESSING country-mean centering the DVs so that our results focus on changes in SWB
+assas <- assas %>% group_by(country) %>% 
+  mutate(ls_c = ls - weighted.mean(ls, weight, na.rm=T),
+         hope_c = hope - weighted.mean(hope, weight, na.rm=T),
+         pa_c = pa - weighted.mean(pa, weight, na.rm=T),
+         na_c = na - weighted.mean(na, weight, na.rm=T))
 
 
 ### PAST HERE IS ***UNDER DEVELOPMENT*** 
