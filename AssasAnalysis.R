@@ -72,7 +72,7 @@ event_dataframe <- do.call(rbind,event_dataframes) # now bind all dataframes int
 # interrupted time series variables required
 
 assas <- left_join(event_dataframe, assasraw, by=c("country_code", "year"))%>%
-  select(-country.y, -country_code_c.y, -YEAR_CALENDAR, -`...1`) %>%
+  select(-country.y, -country_code_c.y, -YEAR_CALENDAR) %>%
   rename(country=country.x, country_code_c=country_code_c.x, weight=WGT) %>%
   mutate(year_number = as.numeric(interval(event_date, survey_date), 'years')) %>%
   mutate(year_after = if_else(after==1,as.numeric(interval(event_date, survey_date), 'years'), 0))
@@ -115,13 +115,9 @@ assas <- assas %>% ungroup() %>%
   mutate(loggdp_z = scale(log2(gdp))[,1],
          conflict_z = scale(conflict)[,1])
 
-#DATA PROCESSING country-mean centering the DVs so that our results focus on changes in SWB
-assas <- assas %>% group_by(country) %>% 
-  mutate(ls_c = ls - weighted.mean(ls, weight, na.rm=T),
-         hope_c = hope - weighted.mean(hope, weight, na.rm=T),
-         pa_c = pa - weighted.mean(pa, weight, na.rm=T),
-         na_c = na - weighted.mean(na, weight, na.rm=T))
-
+#Create a new file without CNTS data
+des <- assas %>% select(-conflict, -conflict_z)
+save(des, file = "descriptives")
 
 ### PAST HERE IS ***UNDER DEVELOPMENT*** 
 ### it shows conceptual ideas, but they haven't been implemented, tested, or the value names matched yet
