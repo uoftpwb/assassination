@@ -36,7 +36,7 @@ events <- read_csv("Raw Data/Country Coding.csv")%>%
   mutate(country_code = countrycode(country, origin="country.name", 
                                       destination="iso3n", warn=TRUE, nomatch=NULL,
                                     custom_match=c("Azerbaijan"="031", "Kosovo"="926")))%>%
-  mutate(event_date=ymd(event_date)) %>%
+  mutate(event_date=mdy(event_date)) %>%
   select(-gallup_availability) %>%
   left_join(survey_dates, by=c("country_code", "year")) %>%  #combine survey and event dates
   mutate(before_survey = survey_date>event_date)%>%  #check if survey occurred before event to determine when to begin the year selection
@@ -117,7 +117,15 @@ assas <- assas %>% ungroup() %>%
 
 #Create a new file without CNTS data
 des <- assas %>% select(-conflict, -conflict_z)
-save(des, file = "descriptives")
+#save(des, file = "descriptives")
+
+des2 <- des
+des2 <- des2[rowSums(is.na(des[,c("ls", "hope", "pa", "na")]))!=4,]
+cat("Number of rows in ORIGINAL data frame:", nrow(des), "\n")
+cat("Number of rows in NEW data frame:", nrow(des2), "\n")
+cat("Number of dropped rows:", nrow(des) - nrow(des2))
+
+table(des2$country)
 
 ### PAST HERE IS ***UNDER DEVELOPMENT*** 
 ### it shows conceptual ideas, but they haven't been implemented, tested, or the value names matched yet
@@ -155,7 +163,9 @@ summary(na.model)
 htmlreg(list(ls.model, hope.model, pa.model, na.model), file = "results 3rs.doc", 
         inline.css = FALSE, doctype = TRUE, html.tag = TRUE, 
         head.tag = TRUE, body.tag = TRUE,
-        custom.model.names = c('Life Satisfaction','Hope','Pos. Affect', 'Neg. Affect'))
+        digits = 3, stars = 0.05,
+        custom.model.names = c('Life Satisfaction','Hope','Positive Affect', 'Negative Affect'),
+        custom.coef.names = c('Intercept', 'Time', 'Assassination', 'Time * Assassination', "GDP (log)", "Pre-assassination Conflict"))
 
 # 2. Testing the significance of random slopes
 # I reestimated the models without random slopes.
@@ -194,21 +204,46 @@ anova(na.model0, na.model)
 #na.model    17 87712 87876 -43839    87678 613.4  9  < 2.2e-16 ***
 
 # 3. Get the random slopes for each country
+
+ls.fix <- as.data.frame(t(fixef(ls.model))) %>% #get fixed effect
+  rename(intercept = 1) %>% #rename the intercept to remove the parenthesis
+  mutate(event_id = "19", country = "all", event_date = NA) #add additional columns for merging with the random slopes
+
 ls.ran <- as.data.frame(coef(ls.model)[1]) %>% #save the country-specific slopes as a data frame
   mutate(event_id = as.factor(row_number())) %>% #create an event_id variable 
-  left_join(., events %>% select(event_id, country, event_date), by = "event_id") #merge the country name to aid interpretation
+  rename(intercept = 1, year_number = 2, after = 3, year_after = 4, loggdp_z = 5, conflict_z = 6) %>% # rename columns
+  left_join(., events %>% select(event_id, country, event_date), by = "event_id") %>%  #merge the country name to aid interpretation  rbind(., as.data.frame(coef(ls.model)[[1]]))
+  rbind(., ls.fix)
+
+hope.fix <- as.data.frame(t(fixef(hope.model))) %>% #get fixed effect
+  rename(intercept = 1) %>% #rename the intercept to remove the parenthesis
+  mutate(event_id = "19", country = "all", event_date = NA) #add additional columns for merging with the random slopes
 
 hope.ran <- as.data.frame(coef(hope.model)[1]) %>% #save the country-specific slopes as a data frame
   mutate(event_id = as.factor(row_number())) %>% #create an event_id variable 
-  left_join(., events %>% select(event_id, country, event_date), by = "event_id") #merge the country name to aid interpretation
+  rename(intercept = 1, year_number = 2, after = 3, year_after = 4, loggdp_z = 5, conflict_z = 6) %>% # rename columns
+  left_join(., events %>% select(event_id, country, event_date), by = "event_id") %>% #merge the country name to aid interpretation
+  rbind(., hope.fix)
+
+pa.fix <- as.data.frame(t(fixef(pa.model))) %>% #get fixed effect
+  rename(intercept = 1) %>% #rename the intercept to remove the parenthesis
+  mutate(event_id = "19", country = "all", event_date = NA) #add additional columns for merging with the random slopes
 
 pa.ran <- as.data.frame(coef(pa.model)[1]) %>% #save the country-specific slopes as a data frame
   mutate(event_id = as.factor(row_number())) %>% #create an event_id variable 
-  left_join(., events %>% select(event_id, country, event_date), by = "event_id") #merge the country name to aid interpretation
+  rename(intercept = 1, year_number = 2, after = 3, year_after = 4, loggdp_z = 5, conflict_z = 6) %>% # rename columns
+  left_join(., events %>% select(event_id, country, event_date), by = "event_id") %>% #merge the country name to aid interpretation
+  rbind(., pa.fix)
+
+na.fix <- as.data.frame(t(fixef(na.model))) %>% #get fixed effect
+  rename(intercept = 1) %>% #rename the intercept to remove the parenthesis
+  mutate(event_id = "19", country = "all", event_date = NA) #add additional columns for merging with the random slopes
 
 na.ran <- as.data.frame(coef(na.model)[1]) %>% #save the country-specific slopes as a data frame
   mutate(event_id = as.factor(row_number())) %>% #create an event_id variable 
-  left_join(., events %>% select(event_id, country, event_date), by = "event_id") #merge the country name to aid interpretation
+  rename(intercept = 1, year_number = 2, after = 3, year_after = 4, loggdp_z = 5, conflict_z = 6) %>% # rename columns
+  left_join(., events %>% select(event_id, country, event_date), by = "event_id") %>%  #merge the country name to aid interpretation
+  rbind(., na.fix)
 
 write.csv(ls.ran, file = "ls ran.csv")
 write.csv(hope.ran, file = "hope ran.csv")
