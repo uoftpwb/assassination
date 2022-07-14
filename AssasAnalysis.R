@@ -36,7 +36,7 @@ events <- read_csv("Raw Data/Country Coding.csv")%>%
   mutate(country_code = countrycode(country, origin="country.name", 
                                       destination="iso3n", warn=TRUE, nomatch=NULL,
                                     custom_match=c("Azerbaijan"="031", "Kosovo"="926")))%>%
-  mutate(event_date=mdy(event_date)) %>%
+  mutate(event_date=ymd(event_date)) %>%
   select(-gallup_availability) %>%
   left_join(survey_dates, by=c("country_code", "year")) %>%  #combine survey and event dates
   mutate(before_survey = survey_date>event_date)%>%  #check if survey occurred before event to determine when to begin the year selection
@@ -99,7 +99,7 @@ merged_before <- merged %>% filter(after == 0) %>%
 assas <- assas %>% left_join(., merged_before)
 
 ##IMPORT GDP and V-DEM data
-country <- import("Raw Data/GDPandLDI.xlsx") %>% 
+country <- import("Raw Data/GDPandLDI.csv") %>% 
   select(country = "Country Name", year = Year, gdp = GDPperCapPPP, dem = v2x_libdem) %>% 
   mutate(country_code = countrycode(country, origin="country.name", 
                                     destination="iso3n", warn=TRUE, nomatch=NULL,
@@ -129,33 +129,91 @@ save(des, file = "descriptives")
 # 1. Life Satisfaction Yearly Model
 
 ls.model <- lmer(ls ~ year_number + after + year_after + loggdp_z + conflict_z + 
-                   (after + year_after|event_id), assas, weight=weight,
+                   (year_number + after + year_after|event_id), assas, weight=weight,
                  control=lmerControl(optimizer="bobyqa",
                                       optCtrl=list(maxfun=2e5)))
 summary(ls.model)
 
 hope.model <- lmer(hope ~ year_number + after + year_after + loggdp_z + conflict_z + 
-                   (after + year_after|event_id), assas, weight=weight,
+                   (year_number + after + year_after|event_id), assas, weight=weight,
                  control=lmerControl(optimizer="bobyqa",
                                      optCtrl=list(maxfun=2e5)))
 summary(hope.model)
 
 pa.model <- lmer(pa ~ year_number + after + year_after + loggdp_z + conflict_z + 
-                   (after + year_after|event_id), assas, weight=weight,
+                   (year_number + after + year_after|event_id), assas, weight=weight,
                  control=lmerControl(optimizer="bobyqa",
                                      optCtrl=list(maxfun=2e5)))
 summary(pa.model)
 
 na.model <- lmer(na ~ year_number + after + year_after + loggdp_z + conflict_z + 
-                   (after + year_after|event_id), assas, weight=weight,
+                   (year_number + after + year_after|event_id), assas, weight=weight,
                  control=lmerControl(optimizer="bobyqa",
                                      optCtrl=list(maxfun=2e5)))
 summary(na.model)
 
-htmlreg(list(ls.model, hope.model, pa.model, na.model), file = "results.doc", 
+htmlreg(list(ls.model, hope.model, pa.model, na.model), file = "results 3rs.doc", 
         inline.css = FALSE, doctype = TRUE, html.tag = TRUE, 
         head.tag = TRUE, body.tag = TRUE,
         custom.model.names = c('Life Satisfaction','Hope','Pos. Affect', 'Neg. Affect'))
+
+# 2. Testing the significance of random slopes
+# I reestimated the models without random slopes.
+# Then used likelihood ratio tests to test the significance of the random slopes
+ls.model0 <- lmer(ls ~ year_number + after + year_after + loggdp_z + conflict_z + 
+                   (1|event_id), assas, weight=weight,
+                 control=lmerControl(optimizer="bobyqa",
+                                     optCtrl=list(maxfun=2e5)))
+hope.model0 <- lmer(hope ~ year_number + after + year_after + loggdp_z + conflict_z + 
+                     (1|event_id), assas, weight=weight,
+                   control=lmerControl(optimizer="bobyqa",
+                                       optCtrl=list(maxfun=2e5)))
+pa.model0 <- lmer(pa ~ year_number + after + year_after + loggdp_z + conflict_z + 
+                   (1|event_id), assas, weight=weight,
+                 control=lmerControl(optimizer="bobyqa",
+                                     optCtrl=list(maxfun=2e5)))
+na.model0 <- lmer(na ~ year_number + after + year_after + loggdp_z + conflict_z + 
+                   (1|event_id), assas, weight=weight,
+                 control=lmerControl(optimizer="bobyqa",
+                                     optCtrl=list(maxfun=2e5)))
+anova(ls.model0, ls.model)
+#npar    AIC    BIC  logLik deviance  Chisq Df Pr(>Chisq)    
+#ls.model0    8 540408 540486 -270196   540392                         
+#ls.model    17 539353 539518 -269660   539319 1072.9  9  < 2.2e-16 ***
+anova(hope.model0, hope.model)
+#npar    AIC    BIC  logLik deviance  Chisq Df Pr(>Chisq)    
+#hope.model0    8 524172 524249 -262078   524156                         
+#hope.model    17 523051 523215 -261509   523017 1138.9  9  < 2.2e-16 ***
+anova(pa.model0, pa.model)
+#npar    AIC    BIC logLik deviance  Chisq Df Pr(>Chisq)    
+#pa.model0    8 122333 122410 -61158   122317                         
+#pa.model    17 121712 121875 -60839   121678 639.24  9  < 2.2e-16 ***
+anova(na.model0, na.model)
+#npar   AIC   BIC logLik deviance Chisq Df Pr(>Chisq)    
+#na.model0    8 88308 88385 -44146    88292                        
+#na.model    17 87712 87876 -43839    87678 613.4  9  < 2.2e-16 ***
+
+# 3. Get the random slopes for each country
+ls.ran <- as.data.frame(coef(ls.model)[1]) %>% #save the country-specific slopes as a data frame
+  mutate(event_id = as.factor(row_number())) %>% #create an event_id variable 
+  left_join(., events %>% select(event_id, country, event_date), by = "event_id") #merge the country name to aid interpretation
+
+hope.ran <- as.data.frame(coef(hope.model)[1]) %>% #save the country-specific slopes as a data frame
+  mutate(event_id = as.factor(row_number())) %>% #create an event_id variable 
+  left_join(., events %>% select(event_id, country, event_date), by = "event_id") #merge the country name to aid interpretation
+
+pa.ran <- as.data.frame(coef(pa.model)[1]) %>% #save the country-specific slopes as a data frame
+  mutate(event_id = as.factor(row_number())) %>% #create an event_id variable 
+  left_join(., events %>% select(event_id, country, event_date), by = "event_id") #merge the country name to aid interpretation
+
+na.ran <- as.data.frame(coef(na.model)[1]) %>% #save the country-specific slopes as a data frame
+  mutate(event_id = as.factor(row_number())) %>% #create an event_id variable 
+  left_join(., events %>% select(event_id, country, event_date), by = "event_id") #merge the country name to aid interpretation
+
+write.csv(ls.ran, file = "ls ran.csv")
+write.csv(hope.ran, file = "hope ran.csv")
+write.csv(pa.ran, file = "pa ran.csv")
+write.csv(na.ran, file = "na ran.csv")
 
 # 2. Life Satisfaction Moderated by Survey Delay
 # 'delay' is a variable that counts the days between the event and the survey
