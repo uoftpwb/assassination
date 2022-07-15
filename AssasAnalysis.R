@@ -127,13 +127,7 @@ cat("Number of dropped rows:", nrow(des) - nrow(des2))
 
 table(des2$country)
 
-### PAST HERE IS ***UNDER DEVELOPMENT*** 
-### it shows conceptual ideas, but they haven't been implemented, tested, or the value names matched yet
-
-
 ################ ANALYSIS #################
-
-
 # 1. Life Satisfaction Yearly Model
 
 ls.model <- lmer(ls ~ year_number + after + year_after + loggdp_z + conflict_z + 
@@ -160,6 +154,7 @@ na.model <- lmer(na ~ year_number + after + year_after + loggdp_z + conflict_z +
                                      optCtrl=list(maxfun=2e5)))
 summary(na.model)
 
+# Creating Table 1
 htmlreg(list(ls.model, hope.model, pa.model, na.model), file = "results 3rs.doc", 
         inline.css = FALSE, doctype = TRUE, html.tag = TRUE, 
         head.tag = TRUE, body.tag = TRUE,
@@ -204,7 +199,7 @@ anova(na.model0, na.model)
 #na.model    17 87712 87876 -43839    87678 613.4  9  < 2.2e-16 ***
 
 # 3. Get the random slopes for each country
-
+# LS
 ls.fix <- as.data.frame(t(fixef(ls.model))) %>% #get fixed effect
   rename(intercept = 1) %>% #rename the intercept to remove the parenthesis
   mutate(event_id = "19", country = "all", event_date = NA) #add additional columns for merging with the random slopes
@@ -214,7 +209,7 @@ ls.ran <- as.data.frame(coef(ls.model)[1]) %>% #save the country-specific slopes
   rename(intercept = 1, year_number = 2, after = 3, year_after = 4, loggdp_z = 5, conflict_z = 6) %>% # rename columns
   left_join(., events %>% select(event_id, country, event_date), by = "event_id") %>%  #merge the country name to aid interpretation  rbind(., as.data.frame(coef(ls.model)[[1]]))
   rbind(., ls.fix)
-
+# Hope
 hope.fix <- as.data.frame(t(fixef(hope.model))) %>% #get fixed effect
   rename(intercept = 1) %>% #rename the intercept to remove the parenthesis
   mutate(event_id = "19", country = "all", event_date = NA) #add additional columns for merging with the random slopes
@@ -224,7 +219,7 @@ hope.ran <- as.data.frame(coef(hope.model)[1]) %>% #save the country-specific sl
   rename(intercept = 1, year_number = 2, after = 3, year_after = 4, loggdp_z = 5, conflict_z = 6) %>% # rename columns
   left_join(., events %>% select(event_id, country, event_date), by = "event_id") %>% #merge the country name to aid interpretation
   rbind(., hope.fix)
-
+# Positive Affect
 pa.fix <- as.data.frame(t(fixef(pa.model))) %>% #get fixed effect
   rename(intercept = 1) %>% #rename the intercept to remove the parenthesis
   mutate(event_id = "19", country = "all", event_date = NA) #add additional columns for merging with the random slopes
@@ -234,7 +229,7 @@ pa.ran <- as.data.frame(coef(pa.model)[1]) %>% #save the country-specific slopes
   rename(intercept = 1, year_number = 2, after = 3, year_after = 4, loggdp_z = 5, conflict_z = 6) %>% # rename columns
   left_join(., events %>% select(event_id, country, event_date), by = "event_id") %>% #merge the country name to aid interpretation
   rbind(., pa.fix)
-
+# Negative Affect
 na.fix <- as.data.frame(t(fixef(na.model))) %>% #get fixed effect
   rename(intercept = 1) %>% #rename the intercept to remove the parenthesis
   mutate(event_id = "19", country = "all", event_date = NA) #add additional columns for merging with the random slopes
@@ -250,48 +245,67 @@ write.csv(hope.ran, file = "hope ran.csv")
 write.csv(pa.ran, file = "pa ran.csv")
 write.csv(na.ran, file = "na ran.csv")
 
-# 2. Life Satisfaction Moderated by Survey Delay
-# 'delay' is a variable that counts the days between the event and the survey
-# if it has a non-zero effect on the effect of after or year_after,
-# then this is evidence of a short-term effect
+# Figure 1
+## Life Satisfaction
+## Create predicted values based on coefficients from the MLM
+### Predicted values pre-event
+fig1.ls.data.pre <- ls.ran %>% 
+  slice(rep(1:n(), each=4)) %>%  # Repeat each row 4 times (to simulate how well-being changes in the 3 years before assassination)
+  group_by(event_id) %>% 
+  mutate(pre = 1,
+         year = seq(-3, 0, 1),
+         after_pred = 0,
+         yr_after_pred = 0,
+         pred = intercept + (year_number * year) + (after * after_pred) + (year_after * yr_after_pred))     
+### Predicted values post-event
+fig1.ls.data.post <- ls.ran %>% 
+  slice(rep(1:n(), each=4)) %>%  # Repeat each row 4 times (to simulate how well-being changes in the 3 years after assassination)
+  group_by(event_id) %>% 
+  mutate(pre = 0,
+         year = seq(0, 3, 1),
+         after_pred = 1,
+         yr_after_pred = year,
+         pred = intercept + (year_number * year) + (after * after_pred) + (year_after * yr_after_pred))     
+### Merge predicted values
+fig1.ls.data <- rbind(fig1.ls.data.pre, fig1.ls.data.post)
 
-# Specifically a negative effect for delay suggests a short term
+## Create separate datasets for plotting
+### The average trend is based on the fixed effect 
+fig1.ls.fixed <- fig1.ls.data %>% filter(event_id == 19)
+### Use Kenya and Uganda as examples
+fig1.ls.kenya <- fig1.ls.data %>% filter(event_id == 10)
+fig1.ls.uganda <- fig1.ls.data %>% filter(event_id == 15)
+### A dataset with the rest of the countries
+fig1.ls.rest <- fig1.ls.data %>% filter(event_id !=19) %>% 
+  filter(event_id !=10) %>% 
+  filter(event_id !=15) 
 
-# We may wish to try a log-linear effect of 'delay', as we might expect that only low
-# values of prox have a noticeable effect where after a certain point the effect
-# quickly falls off as we pass the horizon
+## GGplot for LS
+fig1.ls <- fig1.ls.rest %>% 
+  ggplot(aes(x = year, y = pred, group = event_id)) +
+#  geom_point() +
+  geom_line(data=fig1.ls.rest %>% filter(pre==1),alpha=.1, position=position_jitter(w=0.02, h=0)) +
+  geom_line(data=fig1.ls.rest %>% filter(pre==0),alpha=.1, position=position_jitter(w=0.02, h=0)) +
+  geom_line(data=fig1.ls.fixed %>% filter(pre==1), aes(x = year, y = pred), color = "navyblue", size = 1.5, position=position_jitter(w=0.02, h=0)) +
+  geom_line(data=fig1.ls.fixed %>% filter(pre==0), aes(x = year, y = pred), color = "navyblue", size = 1.5, position=position_jitter(w=0.02, h=0)) +
+  geom_line(data=fig1.ls.kenya %>% filter(pre==1), aes(x = year, y = pred), color = "darkgreen", position=position_jitter(w=0.02, h=0)) +
+  geom_line(data=fig1.ls.kenya %>% filter(pre==0), aes(x = year, y = pred), color = "darkgreen", position=position_jitter(w=0.02, h=0)) +
+  geom_line(data=fig1.ls.uganda %>% filter(pre==1), aes(x = year, y = pred), color = "red", position=position_jitter(w=0.02, h=0)) +
+  geom_line(data=fig1.ls.uganda %>% filter(pre==0), aes(x = year, y = pred), color = "red", position=position_jitter(w=0.02, h=0)) +
+  geom_vline(xintercept = 0, linetype="dotted", color = "blue") +
+  geom_text(x=2.8,y=4.9,label="Kenya",size=5, color="darkgreen") +
+  geom_text(x=2.8,y=5.9,label="Uganda",size=5, color="red") +
+  geom_text(x=2.8,y=5.2,label="Average",size=5, color="navyblue") +
+  geom_text(x=0.7,y=6.8,label="Assassination",size=5, color="black") +
+  theme_classic() +
+  theme(text = element_text(size=16),
+        axis.title.y = element_text(margin = margin(t = 0, r = 10, b = 0, l = 0)),
+        axis.title.x = element_text(margin = margin(t = 10, r = , b = 0, l = 0))) +
+  xlab("Year to Event") +
+  ylab("Life Satisfaction")
 
-ls.delay.model <- lmer(lifesat ~ year_number*event_id + (after|event_id) + (delay|event_id) + (year_after|event_id), assas, weight=wgt)
-  
-# 3. Life Satisfaction Daily Model
-# Here, in order to account for the effect of delay between the event and measurement
-# in a more complete way, instead of considering the life satisfaction measurements
-# by year, we consider them by day. Individual surveys by Gallup are taken on different
-# days and these days are recorded in the database. We introduce parallel measures to the 
-# years model aboove: day_number (days since the beginning of the third calendar year
-# before the event), day_after (days since the event). Like the previous model,
-# a log-linear relationship may be best.
-
-# We introduce individual controls for this model, as we theorize that demographic
-# factors may influence the difficulty Gallup would have in contacting their household,
-# or the order in which households are approached. This makes demographic and regional
-# factors controls in the Pearl-ian sense: they are causal of 'day_after' and 'life satisfaction'.
-
-ls.daily.model <- lmer(lifesat ~ day_number*event_id + (after|event_id) + (day_after|event_id) + gender + age + employment + marriage + region, assas, weight=wgt)
-
-
-############################ GEE Analysis by FC #################################
-#Given the non-convergence, I decided to try a GEE to account for the longitudinal nature of the data.
-
-ls.gee <- geeglm(ls ~ year_number + after + year_after,
-              id = event_id,
-              weights = weight,
-              data = assas,
-              corstr = "exchangeable")
-summary(ls.gee)
-
-
-########################### Plot ################################################
+########################### Additional Plots ################################################
+#Not included in PNAS submission
 #Create an aggregated-level dataset for plotting
 agg <- assas %>% 
   group_by(country, year_number) %>% 
