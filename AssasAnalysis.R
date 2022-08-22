@@ -36,7 +36,7 @@ events <- read_csv("Raw Data/Country Coding.csv")%>%
   mutate(country_code = countrycode(country, origin="country.name", 
                                       destination="iso3n", warn=TRUE, nomatch=NULL,
                                     custom_match=c("Azerbaijan"="031", "Kosovo"="926")))%>%
-  mutate(event_date=mdy(event_date)) %>%
+  mutate(event_date=ymd(event_date)) %>%
   select(-gallup_availability) %>%
   left_join(survey_dates, by=c("country_code", "year")) %>%  #combine survey and event dates
   mutate(before_survey = survey_date>event_date)%>%  #check if survey occurred before event to determine when to begin the year selection
@@ -114,6 +114,8 @@ assas <- assas %>% left_join(., country, by = c("country_code","year"))
 assas <- assas %>% ungroup() %>% 
   mutate(loggdp_z = scale(log2(gdp))[,1],
          conflict_z = scale(conflict)[,1])
+
+write.csv(assas, "assas.csv")
 
 #Create a new file without CNTS data
 des <- assas %>% select(-conflict, -conflict_z)
