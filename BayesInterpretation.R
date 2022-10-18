@@ -1,4 +1,6 @@
 library(sjPlot)
+library(Matrix)
+library(tidyverse)
 dataframe <- read.csv("assas.csv")
 
 
@@ -14,6 +16,19 @@ tab_model(model3, file="../BayesOutput/na_results_table.html")
 model4 <- readRDS("../BayesOutput/model-pa.rds")
 tab_model(model4, file="../BayesOutput/pa_results_table.html")
 
-tab_model(model1, model2, model3, model4)
+tab_model(model1, model2, model3, model4, file="../BayesOutput/full_results_table.html")
+
+assas1 <- dataframe
+assas1$country <- as.factor(assas1$country)
+sds <- tibble(variable=c("ls", "hope", "pa", "na"), sd=c(0,0,0,0))
 
 
+for (var in c("ls", "hope", "pa", "na")){
+  sdreg <- lm(formula(paste0(var, " ~ country")), data = assas1)
+  sds[sds$variable==var, "sd"] <- summary(sdreg)$sigma
+}
+
+write_csv(sds, "standarddeviations.csv")
+
+sd(assas1$conflict_z)
+summary(assas1$conflict)
