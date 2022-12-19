@@ -1,0 +1,160 @@
+---
+title: "assassination plots"
+author: "Kenith"
+date: '2022-12-15'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(dplyr)
+library(tidyverse)
+library(brms)
+library(ggplot2)
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Import the models
+```{r}
+model.list <- list(ls = readRDS("model.rds"),
+                   hope = readRDS("model-hope.rds"),
+                   pa = readRDS("model-pa.rds"),
+                   na = readRDS("model-na.rds"))
+```
+
+## Creating a data frame of predictors
+```{r create-predictors}
+predict.input <- data.frame(year_number = c(-3:0, 0:3),
+                           after = c(rep(0, 4), rep(1, 4)),
+                           year_after = c(rep(0, 4), 0:3))
+
+predict.input.list <- list(noMod = predict.input %>% mutate(loggdp_z = 0, conflict_z = 0),
+                         loggdp_z.low = predict.input %>% mutate(loggdp_z = -1, conflict_z = 0),
+                         loggdp_z.high = predict.input %>% mutate(loggdp_z = 1, conflict_z = 0),
+                         conflict_z.low = predict.input %>% mutate(loggdp_z = 0, conflict_z = -1),
+                         conflict_z.high = predict.input %>% mutate(loggdp_z = 0, conflict_z = 1))
+
+```
+
+## Getting the predicted values
+```{r predict-values}
+PredictFun <- function(model.index, inputdata.index){
+  
+  model <- model.list[[model.index]]
+  data <- predict.input.list[[inputdata.index]]
+  
+  predicted.values <- posterior_epred(model, 
+                                     newdata = data, 
+                                     re_formula = NA) %>% 
+                      {quantiles <- apply(., MARGIN = 2, quantile, probs = c(0.025, 0.975))
+                       mean <- colMeans(.)
+                       rbind(quantiles, mean)} %>% 
+                      t %>% as.data.frame
+  return(data %>% 
+           cbind(mean = predicted.values$mean,
+                 lower = predicted.values$`2.5%`,
+                 upper = predicted.values$`97.5%`) %>%
+           mutate(variable = names(model.list)[model.index],
+                  moderator = names(predict.input.list)[inputdata.index]))
+}
+
+model.input.indexes <- expand.grid(1:length(model.list), 1:length(predict.input.list))
+
+predicted.values <- Map(PredictFun, model.input.indexes[[1]], model.input.indexes[[2]]) %>% bind_rows
+```
+
+## Plotting the values
+```{r plotting-noMod}
+var.labels <- data.frame(
+  c("ls", "hope", "na", "pa"),
+  c("Life Satisfaction", "Hope", "Negative Affect", "Positive Affect"),
+  ylim.max = c(10, 10, 1, 1),
+  vline.label.y = c(9, 9, 0.9, 0.9)
+)
+
+plot.noMod.list <- lapply(names(model.list), function(var){
+  predicted.values %>% filter(variable %in% var & moderator %in% "noMod") %>%
+    ggplot(aes(x = year_number, y = mean)) +
+    geom_line(data = . %>% filter(after == 0), color = "navyblue") +
+    geom_line(data = . %>% filter(after == 1), color = "navyblue") +
+    geom_ribbon(aes(ymin = lower, ymax = upper), alpha =.1, colour = NA) +
+    geom_vline(xintercept = 0, linetype="dotted", color = "blue") +
+    theme_classic() +
+    theme(text = element_text(size=16),
+          axis.title.y = element_text(margin = margin(t = 0, r = 10, b = 0, l = 0)),
+          axis.title.x = element_text(margin = margin(t = 10, r = , b = 0, l = 0)),
+          legend.title = element_blank()) +
+    xlab("Year to Event") +
+    ylab(var.labels[var.labels[[1]] %in% var, 2]) +
+    geom_text(x = 0.7, 
+              y = var.labels$vline.label.y[var.labels[[1]] %in% var],
+              label="Assassination", color="black") +
+    ylim(0, var.labels$ylim.max[var.labels[[1]] %in% var])
+})
+
+names(plot.noMod.list) <- names(model.list)
+
+lapply(names(plot.noMod.list), function(var){
+  ggsave(plot = plot.noMod.list[[var]], filename = paste0(var, ".noMod.png"), width = 15, height = 15, units = "cm")})
+
+lapply(plot.noMod.list, print)
+```
+```{r plotting-loggdp_z}
+plot.loggdp_z.list <- lapply(names(model.list), function(var){
+  predicted.values %>% filter(variable %in% var & moderator %in% c("loggdp_z.low", "loggdp_z.high")) %>%
+    ggplot(aes(x = year_number, y = mean, group = moderator, color = moderator, linetype = moderator)) +
+    geom_line(data = . %>% filter(after == 0 & moderator %in% "loggdp_z.low")) +
+    geom_line(data = . %>% filter(after == 1 & moderator %in% "loggdp_z.low")) +
+    geom_line(data = . %>% filter(after == 0 & moderator %in% "loggdp_z.high")) +
+    geom_line(data = . %>% filter(after == 1 & moderator %in% "loggdp_z.high")) +
+    geom_ribbon(aes(ymin = lower, ymax = upper), alpha =.1, colour = NA) +
+    geom_vline(xintercept = 0, linetype="dotted", color = "blue") +
+    theme_classic() +
+    theme(text = element_text(size=16),
+          axis.title.y = element_text(margin = margin(t = 0, r = 10, b = 0, l = 0)),
+          axis.title.x = element_text(margin = margin(t = 10, r = , b = 0, l = 0)),
+          legend.title = element_blank()) +
+    xlab("Year to Event") +
+    ylab(var.labels[var.labels[[1]] %in% var, 2]) +
+    geom_text(x = 1, 
+              y = var.labels$vline.label.y[var.labels[[1]] %in% var],
+              label="Assassination", color="black") +
+    ylim(0, var.labels$ylim.max[var.labels[[1]] %in% var])
+})
+
+names(plot.loggdp_z.list) <- names(model.list)
+
+lapply(names(plot.loggdp_z.list), function(var){
+  ggsave(plot = plot.loggdp_z.list[[var]], filename = paste0(var, ".loggdp_z.png"), width = 15, height = 15, units = "cm")})
+
+lapply(plot.loggdp_z.list, print)
+```
+```{r plotting-conflict_z}
+plot.conflict_z.list <- lapply(names(model.list), function(var){
+  predicted.values %>% filter(variable %in% var & moderator %in% c("conflict_z.low", "conflict_z.high")) %>%
+    ggplot(aes(x = year_number, y = mean, group = moderator, color = moderator, linetype = moderator)) +
+    geom_line(data = . %>% filter(after == 0 & moderator %in% "conflict_z.low")) +
+    geom_line(data = . %>% filter(after == 1 & moderator %in% "conflict_z.low")) +
+    geom_line(data = . %>% filter(after == 0 & moderator %in% "conflict_z.high")) +
+    geom_line(data = . %>% filter(after == 1 & moderator %in% "conflict_z.high")) +
+    geom_ribbon(aes(ymin = lower, ymax = upper), alpha =.1, colour = NA) +
+    geom_vline(xintercept = 0, linetype="dotted", color = "blue") +
+    theme_classic() +
+    theme(text = element_text(size=16),
+          axis.title.y = element_text(margin = margin(t = 0, r = 10, b = 0, l = 0)),
+          axis.title.x = element_text(margin = margin(t = 10, r = , b = 0, l = 0)),
+          legend.title = element_blank()) +
+    xlab("Year to Event") +
+    ylab(var.labels[var.labels[[1]] %in% var, 2]) +
+    geom_text(x = 1, 
+              y = var.labels$vline.label.y[var.labels[[1]] %in% var],
+              label="Assassination", color="black") +
+    ylim(0, var.labels$ylim.max[var.labels[[1]] %in% var])
+})
+
+names(plot.conflict_z.list) <- names(model.list)
+
+lapply(names(plot.conflict_z.list), function(var){
+  ggsave(plot = plot.conflict_z.list[[var]], filename = paste0(var, ".conflict_z.png"), width = 15, height = 15, units = "cm")})
+
+lapply(plot.conflict_z.list, print)
+```
