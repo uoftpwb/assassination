@@ -13,82 +13,277 @@ library(ggplot2)
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## Import the models
-```{r}
-model.nomod.list <- list(ls = readRDS("model.rds"),
-                   hope = readRDS("model-hope.rds"),
-                   pa = readRDS("model-pa.rds"),
-                   na = readRDS("model-na.rds"))
-```
-
-## Creating a data frame of predictors
-```{r create-predictors}
+## Creating a data frame of predictors and Import the models
+```{r create-predictors-import-models}
 predict.input <- data.frame(year_number = c(-3:0, 0:3),
                            after = c(rep(0, 4), rep(1, 4)),
-                           year_after = c(rep(0, 4), 0:3))
+                           year_after = c(rep(0, 4), 0:3),
+                           loggdp_z = 0, 
+                           conflict_z = 0)
 
-predict.input.list <- list(noMod = predict.input %>% mutate(loggdp_z = 0, conflict_z = 0),
-                         loggdp_z.low = predict.input %>% mutate(loggdp_z = -1, conflict_z = 0),
-                         loggdp_z.high = predict.input %>% mutate(loggdp_z = 1, conflict_z = 0),
-                         conflict_z.low = predict.input %>% mutate(loggdp_z = 0, conflict_z = -1),
-                         conflict_z.high = predict.input %>% mutate(loggdp_z = 0, conflict_z = 1))
+noMod.list <- list(model = list(ls = readRDS("Fitted Models/model.rds"),
+                                 hope = readRDS("Fitted Models/model-hope.rds"),
+                                 pa = readRDS("Fitted Models/model-pa.rds"),
+                                 na = readRDS("Fitted Models/model-na.rds")),
+                   input = predict.input)
+
+completed.list <- list(model = list(ls = readRDS("Fitted Models/model-ls-completed.rds"),
+                                    hope = readRDS("Fitted Models/model-hope-completed.rds"),
+                                    pa = readRDS("Fitted Models/model-pa-completed.rds"),
+                                    na = readRDS("Fitted Models/model-na-completed.rds")),
+                       input = rbind(predict.input %>% mutate(completed = 0),
+                                     predict.input %>% mutate(completed = 1)),
+                       moderator = "completed")
+
+completed_rulingParty.list <- list(model = list(ls = readRDS("Fitted Models/model-ls-completed_rulingParty.rds"),
+                                                pa = readRDS("Fitted Models/model-pa-completed_rulingParty.rds"),
+                                                na = readRDS("Fitted Models/model-na-completed_rulingParty.rds")),
+                                   input = rbind(predict.input %>% expand_grid(rulingParty = c(0,1),
+                                                                               completed = c(0,1))),
+                                   moderator = c("rulingParty", "completed"))
+
+dem_rulingParty.list <- list(model = list(pa = readRDS("Fitted Models/model-pa-dem_rulingParty.rds"),
+                                          na = readRDS("Fitted Models/model-na-dem_rulingParty.rds")))
+#dem is a continuous variable, we put (mean - sd, mean + sd) instead of (0,1)
+dem_m.sd <- dem_rulingParty.list$model$pa$data %>% select(dem, event_id) %>% unique %>% 
+              group_by(event_id) %>% summarise(dem = mean(dem)) %>% 
+              summarise(mean = mean(dem), sd = sd(dem))
+dem_lower <- dem_m.sd$mean - dem_m.sd$sd
+dem_higher <- dem_m.sd$mean + dem_m.sd$sd
+dem_rulingParty.list$input <- rbind(predict.input %>% expand_grid(rulingParty = c(0,1), 
+                                                                  dem = c(dem_lower, dem_higher)))
+dem_rulingParty.list$moderator <- c("rulingParty", "dem")
+
+govapproval_rulingParty.list <- list(model = list (ls = readRDS("Fitted Models/model-ls-govapproval_rulingParty.rds"),
+                                                   pa = readRDS("Fitted Models/model-pa-govapproval_rulingParty.rds"),
+                                                   na = readRDS("Fitted Models/model-na-govapproval_rulingParty.rds")),
+                                     input = rbind(predict.input %>% expand_grid(rulingParty = c(0,1), 
+                                                                                 govapproval = c(0,1))),
+                                     moderator = c("rulingParty", "govapproval"))
+
+male.list <- list(model = list(ls = readRDS("Fitted Models/model-ls-male.rds"),
+                               pa = readRDS("Fitted Models/model-pa-male.rds"),
+                               na = readRDS("Fitted Models/model-na-male.rds")),
+                  input = rbind(predict.input %>% mutate(male = 0),
+                                predict.input %>% mutate(male = 1)),
+                  moderator = "male")
+
+rulingParty.list <- list(model = list(ls = readRDS("Fitted Models/model-ls-rulingParty.rds"),
+                                      hope = readRDS("Fitted Models/model-hope-rulingParty.rds"),
+                                      pa = readRDS("Fitted Models/model-pa-rulingParty.rds"),
+                                      na = readRDS("Fitted Models/model-na-rulingParty.rds")),
+                         input = rbind(predict.input %>% mutate(rulingParty = 0),
+                                       predict.input %>% mutate(rulingParty = 1)),
+                         moderator = "rulingParty")
+
+rulPartyChange.list <- list(model = list(ls = readRDS("Fitted Models/model-ls-rulPartyChange.rds"),
+                                         hope = readRDS("Fitted Models/model-hope-rulPartyChange.rds"),
+                                         pa = readRDS("Fitted Models/model-pa-rulPartyChange.rds"),
+                                         na = readRDS("Fitted Models/model-na-rulPartyChange.rds")),
+                            input = rbind(predict.input %>% mutate(rulPartyChange = 0),
+                                          predict.input %>% mutate(rulPartyChange = 1)),
+                            moderator = "rulPartyChange")
+
+socialsupport.list <- list(model = list(ls = readRDS("Fitted Models/model-ls-socialsupport.rds"),
+                                        hope = readRDS("Fitted Models/model-hope-socialsupport.rds"),
+                                        pa = readRDS("Fitted Models/model-pa-socialsupport.rds"),
+                                        na = readRDS("Fitted Models/model-na-socialsupport.rds")),
+                           input = rbind(predict.input %>% mutate(socialsupport = 0),
+                                         predict.input %>% mutate(socialsupport = 1)),
+                           moderator = "socialsupport")
 
 ```
 
 ## Getting the predicted values
-```{r predict-values-coeffecient}
-PredictFunNoMod <- function(model, data){
+```{r}
+#Create a function to get the coef from the model
+CoefFromModel <- function(model, maineff_coef = NULL, moderator = NULL){
+  #get the coef from the model
   poplevel_eff <- fixef(model)
   
-  PredictValue <- function(input){
-    year_number <- input["year_number"]
-    after <- input["after"]
-    year_after <- input["year_after"]
-    loggdp_z <- input["loggdp_z"]
-    conflict_z <- input["conflict_z"]
-
-    mean_coef <- poplevel_eff[, "Estimate"]
-    Q2.5_coef <- poplevel_eff[, "Q2.5"]
-    Q97.5_coef <- poplevel_eff[, "Q97.5"]
-
-    predicted_value.mean <- mean_coef["Intercept"] + 
-                        mean_coef["year_number"] * year_number +
-                        mean_coef["after"] * after + 
-                        mean_coef["year_after"] * year_after + 
-                        mean_coef["loggdp_z"] * loggdp_z + 
-                        mean_coef["conflict_z"] * conflict_z
+  #when there is a moderator, we need the maineff_coef
+  if(!is.null(maineff_coef)){
+    if(is.null(moderator)) stop("moderator is missing")
     
-    #we want to fix the coef for Intercept, year_number, loggdp_z, conflict_z at their mean
-    predicted_value.Q2.5 <- mean_coef["Intercept"] + 
-                        mean_coef["year_number"] * year_number +
-                        Q2.5_coef["after"] * after + 
-                        Q2.5_coef["year_after"] * year_after + 
-                        mean_coef["loggdp_z"] * loggdp_z + 
-                        mean_coef["conflict_z"] * conflict_z
-    predicted_value.Q97.5 <- mean_coef["Intercept"] + 
-                        mean_coef["year_number"] * year_number +
-                        Q97.5_coef["after"] * after + 
-                        Q97.5_coef["year_after"] * year_after + 
-                        mean_coef["loggdp_z"] * loggdp_z + 
-                        mean_coef["conflict_z"] * conflict_z
-    
-    return(
-      list(mean = predicted_value.mean,
-           #we don't need the upper and lower for pre-effect
-           lower = ifelse(after, predicted_value.Q2.5, predicted_value.mean),
-           upper = ifelse(after, predicted_value.Q97.5, predicted_value.mean))
-    )
+    poplevel_eff[moderator, ] <- 0
+    poplevel_eff["year_number", ] <- maineff_coef["year_number"]
+    poplevel_eff["Intercept", ] <- maineff_coef["Intercept"]
   }
-    
-  predicted.values <- apply(data, 1, PredictValue) %>% bind_rows 
   
-  return(data %>% cbind(predicted.values))
+  mean_coef <- poplevel_eff[, "Estimate"]
+  #we want to fix the coef at their mean except for or "after" or "year_after"
+  Q2.5_coef <- sapply(poplevel_eff %>% row.names, 
+                      function(var){
+                        return(ifelse(grepl("^after$|^year_after$", var), 
+                                      poplevel_eff[var, "Q2.5"],
+                                      poplevel_eff[var, "Estimate"]))
+                      })
+  Q97.5_coef <- sapply(poplevel_eff %>% row.names, 
+                      function(var){
+                        return(ifelse(grepl("^after$|^year_after$", var), 
+                                      poplevel_eff[var, "Q97.5"],
+                                      poplevel_eff[var, "Estimate"]))
+                      })
+  
+  return(list(mean_coef = mean_coef, 
+              Q2.5_coef = Q2.5_coef, 
+              Q97.5_coef = Q97.5_coef))
 }
-  
-#model.input.indexes <- expand.grid(1:length(model.list), 1:length(predict.input.list))
 
-predicted.values <- lapply(model.nomod.list, PredictFunNoMod, predict.input.list$noMod) %>% bind_rows(.id = "variable") 
+#Create a function to predict the values from the input and coef
+PredictValue <- function(input, coef){
+  sapply(names(coef), function(var){
+    if (var %in% "Intercept"){
+      return(coef["Intercept"])
+    } else if (grepl(":", var)){ #this is useful for the model with moderators
+      varlist <- strsplit(var, ":")[[1]]
+      return(coef[var] * prod(input[varlist]))
+    } else {
+      return(coef[var] * input[var])
+    }
+  }) %>% unlist %>% sum
+}
+
+#combining the above two functions to predict multiple values from a list of models and input and moderator
+#the list should be in the same format as the one in "Creating a data frame of predictors and import the models" 
+#maineff_coef.list is required if there is moderator
+PredictFun <- function(model.data.list, maineff_coef.list = NULL){
+  if(!is.null(model.data.list$moderator) & is.null(maineff_coef.list))stop("maineff_coef.list is missing for model with moderator")
+  dvs <- names(model.data.list$model)
+  #get the coef for the model
+  coef.list <- lapply(dvs, function(dv){
+    CoefFromModel(model = model.data.list$model[[dv]], 
+                  maineff_coef = maineff_coef.list[[dv]], 
+                  moderator = model.data.list$moderator)})
+  names(coef.list) <- dvs
   
+  predicted.list <- lapply(dvs, function(dv){
+    mean <- apply(model.data.list$input, 1, PredictValue, coef = coef.list[[dv]]$mean_coef)
+    lower <- apply(model.data.list$input, 1, PredictValue, coef = coef.list[[dv]]$Q2.5_coef)
+    upper <- apply(model.data.list$input, 1, PredictValue, coef = coef.list[[dv]]$Q97.5_coef)
+    
+    return(model.data.list$input %>% cbind(mean, lower, upper))
+  })
+  names(predicted.list) <- dvs
+  
+  return(predicted.list %>% bind_rows(.id = "variable") %>% 
+           mutate(moderator = ifelse(!is.null(model.data.list$moderator),
+                                     paste(model.data.list$moderator, collapse = "_"), 
+                                     NA)))
+}
+
+maineff_coef.list <- list(ls = CoefFromModel(noMod.list$model$ls)$mean_coef,
+                          hope = CoefFromModel(noMod.list$model$hope)$mean_coef,
+                          pa = CoefFromModel(noMod.list$model$pa)$mean_coef,
+                          na = CoefFromModel(noMod.list$model$na)$mean_coef)
+
+predicted.values <- bind_rows(PredictFun(noMod.list),
+                              lapply(list(
+                                completed.list,
+                                completed_rulingParty.list,
+                                dem_rulingParty.list,
+                                govapproval_rulingParty.list,
+                                male.list,
+                                rulingParty.list,
+                                rulPartyChange.list,
+                                socialsupport.list
+                              ), PredictFun, maineff_coef.list))
+
+
+
+# #Create a function to predict the values from the input and coef
+# PredictValue <- function(input, coef){
+#   sapply(names(coef), function(var){
+#     if (var %in% "Intercept"){
+#       return(coef["Intercept"])
+#     } else if (grepl(":", var)){ #this is useful for the model with moderators
+#       varlist <- strsplit(var, ":")[[1]]
+#       return(coef[var] * prod(input[varlist]))
+#     } else {
+#       return(coef[var] * input[var])
+#     }
+#   }) %>% unlist %>% sum
+# }
+
+#combining the above two functions to predict multiple values from multiple input
+# PredictFun <- function(model, data, maineff_coef = NULL, moderator = NULL){
+#   coef = CoefFromModel(model, maineff_coef = maineff_coef, moderator = moderator)
+#   
+#   mean <- apply(data, 1, PredictValue, coef = coef$mean_coef)
+#   lower <- apply(data, 1, PredictValue, coef = coef$Q2.5_coef)
+#   upper <- apply(data, 1, PredictValue, coef = coef$Q97.5_coef)
+# 
+#   return(data %>% cbind(mean, lower, upper) %>% mutate(moderator = moderator))
+# }
+
+# predicted.values <- bind_rows(lapply(model.nomod.list, PredictFun, predict.input.list$noMod) %>% 
+#                                 bind_rows(.id = "variable") %>% mutate(moderator = "no moderator"),
+#                               lapply(model.completed.list, PredictFun, predict.input.list$completed) %>% 
+#                                 bind_rows(.id = "variable") %>% mutate(moderator = "completed"),
+#                               lapply(model.dem_rulingParty.list, PredictFun, predict.input.list$dem_rulingParty) %>% 
+#                                 bind_rows(.id = "variable") %>% mutate(moderator = "dem_rulingParty"),
+#                               lapply(model.dem_rulingParty.list, PredictFun, predict.input.list$dem_rulingParty) %>% 
+#                                 bind_rows(.id = "variable") %>% mutate(moderator = "dem_rulingParty"),
+#                               lapply(model.rulingParty.list, PredictFun, predict.input.list$rulingParty) %>% 
+#                                 bind_rows(.id = "variable") %>% mutate(moderator = "rulingParty"),
+#                               lapply(model.rulingParty.list, PredictFun, predict.input.list$rulingParty) %>% 
+#                                 bind_rows(.id = "variable") %>% mutate(moderator = "rulingParty"),)
+```
+
+```{r predict-values-coefficient2}
+# This code is good when we don't need to consider moderators.
+# PredictFunNoMod <- function(model, data){
+#   poplevel_eff <- fixef(model)
+#   
+#   PredictValue <- function(input){
+#     year_number <- input["year_number"]
+#     after <- input["after"]
+#     year_after <- input["year_after"]
+#     loggdp_z <- input["loggdp_z"]
+#     conflict_z <- input["conflict_z"]
+# 
+#     mean_coef <- poplevel_eff[, "Estimate"]
+#     Q2.5_coef <- poplevel_eff[, "Q2.5"]
+#     Q97.5_coef <- poplevel_eff[, "Q97.5"]
+# 
+#     predicted_value.mean <- mean_coef["Intercept"] + 
+#                         mean_coef["year_number"] * year_number +
+#                         mean_coef["after"] * after + 
+#                         mean_coef["year_after"] * year_after + 
+#                         mean_coef["loggdp_z"] * loggdp_z + 
+#                         mean_coef["conflict_z"] * conflict_z
+#     
+#     #we want to fix the coef for Intercept, year_number, loggdp_z, conflict_z at their mean
+#     predicted_value.Q2.5 <- mean_coef["Intercept"] + 
+#                         mean_coef["year_number"] * year_number +
+#                         Q2.5_coef["after"] * after + 
+#                         Q2.5_coef["year_after"] * year_after + 
+#                         mean_coef["loggdp_z"] * loggdp_z + 
+#                         mean_coef["conflict_z"] * conflict_z
+#     predicted_value.Q97.5 <- mean_coef["Intercept"] + 
+#                         mean_coef["year_number"] * year_number +
+#                         Q97.5_coef["after"] * after + 
+#                         Q97.5_coef["year_after"] * year_after + 
+#                         mean_coef["loggdp_z"] * loggdp_z + 
+#                         mean_coef["conflict_z"] * conflict_z
+#     
+#     return(
+#       list(mean = predicted_value.mean,
+#            #we don't need the upper and lower for pre-effect
+#            lower = ifelse(after, predicted_value.Q2.5, predicted_value.mean),
+#            upper = ifelse(after, predicted_value.Q97.5, predicted_value.mean))
+#     )
+#   }
+#     
+#   predicted.values <- apply(data, 1, PredictValue) %>% bind_rows 
+#   
+#   return(data %>% cbind(predicted.values))
+# }
+#   
+# #model.input.indexes <- expand.grid(1:length(model.list), 1:length(predict.input.list))
+# 
+# predicted.values <- lapply(model.nomod.list, PredictFunNoMod, predict.input.list$noMod) %>% bind_rows(.id = "variable") 
+#   
 ```
 
 ```{r predict-values-simulation}
@@ -124,11 +319,12 @@ var.labels <- data.frame(
   c("ls", "hope", "na", "pa"),
   c("Life Satisfaction", "Hope", "Negative Affect", "Positive Affect"),
   ylim.max = c(10, 10, 1, 1),
+  ylim.min = c(0, 0, 0, 0),
   vline.label.y = c(9, 9, 0.9, 0.9)
 )
 
-plot.noMod.list <- lapply(names(model.nomod.list), function(var){
-  predicted.values %>% filter(variable %in% var) %>%
+plot.noMod.list <- lapply(names(noMod.list$model), function(var){
+  predicted.values %>% filter(variable %in% var & is.na(moderator)) %>%
     ggplot(aes(x = year_number, y = mean)) +
     geom_line(data = . %>% filter(after == 0), color = "navyblue") +
     geom_line(data = . %>% filter(after == 1), color = "navyblue") +
@@ -143,28 +339,91 @@ plot.noMod.list <- lapply(names(model.nomod.list), function(var){
     ylab(var.labels[var.labels[[1]] %in% var, 2]) +
     geom_text(x = 0.7, 
               y = var.labels$vline.label.y[var.labels[[1]] %in% var],
-              label="Assassination", color="black") +
-    ylim(0, var.labels$ylim.max[var.labels[[1]] %in% var])
+              label="Assassination", color="blue") +
+    ylim(var.labels$ylim.min[var.labels[[1]] %in% var], var.labels$ylim.max[var.labels[[1]] %in% var])
 })
 
-names(plot.noMod.list) <- names(model.nomod.list)
+names(plot.noMod.list) <- names(noMod.list$model)
 
 lapply(names(plot.noMod.list), function(var){
   ggsave(plot = plot.noMod.list[[var]], filename = paste0(var, ".noMod.png"), width = 15, height = 15, units = "cm")})
 
 lapply(plot.noMod.list, print)
 ```
-```{r plotting-loggdp_z}
-#***everything below this line is not fixed yet
 
-# plot.loggdp_z.list <- lapply(names(model.list), function(var){
-#   predicted.values %>% filter(variable %in% var & moderator %in% c("loggdp_z.low", "loggdp_z.high")) %>%
-#     ggplot(aes(x = year_number, y = mean, group = moderator, color = moderator, linetype = moderator)) +
-#     geom_line(data = . %>% filter(after == 0 & moderator %in% "loggdp_z.low")) +
-#     geom_line(data = . %>% filter(after == 1 & moderator %in% "loggdp_z.low")) +
-#     geom_line(data = . %>% filter(after == 0 & moderator %in% "loggdp_z.high")) +
-#     geom_line(data = . %>% filter(after == 1 & moderator %in% "loggdp_z.high")) +
-#     geom_ribbon(aes(ymin = lower, ymax = upper), alpha =.1, colour = NA) +
+```{r plotting-single-moderator}
+moderatorRef <- rbind(data.frame(moderator = "completed", value = c(0, 1), 
+                                 label = c("assasination\nnot completed\n", "assasination\ncompleted\n")),
+                      data.frame(moderator = "dem", value = c(dem_lower, dem_higher), 
+                                 label = c(paste0("lower democracy(", round(dem_lower, 2), ")"), 
+                                           paste0("higher democracy(", round(dem_higher, 2), ")"))),
+                      data.frame(moderator = "govapproval", value = c(0, 1), 
+                                 label = c("disapprove of\ncountry leadership\n", "approve of\ncountry leadership\n")),
+                      data.frame(moderator = "male", value = c(0, 1), 
+                                 label = c("female", "male")),
+                      data.frame(moderator = "rulingParty", value = c(0, 1), 
+                                 label = c("target not in\nruling party\n ", "target in\nruling party\n ")),
+                      data.frame(moderator = "rulPartyChange", value = c(0, 1), 
+                                 label = c("ruling party not\nchange", "ruling party change")),
+                      data.frame(moderator = "socialsupport", value = c(0, 1), 
+                                 label = c("don't have\nsocial support\n", "have social\nsupport\n")))
+
+PlotSingleModeratorFun <- function(mod, var){
+  predicted.values %>% filter(variable %in% var & moderator %in% mod) %>%
+    merge(moderatorRef, by.x = c("moderator", mod), by.y = c("moderator", "value")) %>%
+    ggplot(aes(x = year_number, y = mean, group = label, color = label, linetype = label)) +
+    geom_line(data = . %>% filter(after == 1)) + 
+    geom_line(data = . %>% filter(after == 0)) + 
+    geom_ribbon(aes(ymin = lower, ymax = upper, fill = label), alpha =.1, colour = NA) +
+    geom_vline(xintercept = 0, linetype="dotted", color = "blue") +
+    theme_classic() +
+    theme(text = element_text(size=15),
+          axis.title.y = element_text(margin = margin(t = 0, r = 10, b = 0, l = 0)),
+          axis.title.x = element_text(margin = margin(t = 10, r = , b = 0, l = 0)),
+          legend.title = element_blank()) +
+    xlab("Year to Event") +
+    ylab(var.labels[var.labels[[1]] %in% var, 2]) +
+    geom_text(x = 1,
+              y = var.labels$vline.label.y[var.labels[[1]] %in% var],
+              label="Assassination", color="blue") +
+    ylim(var.labels$ylim.min[var.labels[[1]] %in% var], var.labels$ylim.max[var.labels[[1]] %in% var])
+}
+
+PlotSingleModeratorFun(var = "ls", mod = "rulingParty")
+
+singlemod_and_var <- lapply(list(completed.list, male.list, 
+                                 rulingParty.list, rulPartyChange.list, 
+                                 socialsupport.list), 
+                             function(x) {data.frame(mod = x$moderator,
+                                                     var = names(x$model))}) %>% 
+                      bind_rows
+
+plot.SingleModerator.list <- mapply(PlotSingleModeratorFun, singlemod_and_var$mod, singlemod_and_var$var, SIMPLIFY = F)
+
+names(plot.SingleModerator.list) <- apply(singlemod_and_var %>% relocate(var), 1, paste, collapse = ".")
+
+lapply(names(plot.SingleModerator.list), function(name){
+   ggsave(plot = plot.SingleModerator.list[[name]], filename = paste0(name, ".png"), width = 18, height = 15, units = "cm")})
+```
+
+```{r plotting-two-moderators}
+#### this code block is useful when we want to plot all four lines of model with two moderators in one plot
+# PlotTwoModeratorsFun <- function(mods, var){
+#   moderators <- strsplit(mods, "_") %>% unlist
+#   
+#   predicted.values %>% filter(variable %in% var & moderator %in% mods) %>% 
+#     separate(moderator, into = c("moderator1", "moderator2"), sep = "_") %>%
+#     merge(moderatorRef, 
+#           by.x = c("moderator1", moderators[1]), 
+#           by.y = c("moderator", "value")) %>%
+#     merge(moderatorRef, 
+#           by.x = c("moderator2", moderators[2]), 
+#           by.y = c("moderator", "value")) %>%
+#     unite("label", label.x, label.y, sep = ", ") %>%
+#     ggplot(aes(x = year_number, y = mean, group = label, color = label, linetype = label)) +
+#     geom_line(data = . %>% filter(after == 1)) + 
+#     geom_line(data = . %>% filter(after == 0)) + 
+#     geom_ribbon(aes(ymin = lower, ymax = upper, fill = label), alpha =.1, colour = NA) +
 #     geom_vline(xintercept = 0, linetype="dotted", color = "blue") +
 #     theme_classic() +
 #     theme(text = element_text(size=16),
@@ -173,46 +432,79 @@ lapply(plot.noMod.list, print)
 #           legend.title = element_blank()) +
 #     xlab("Year to Event") +
 #     ylab(var.labels[var.labels[[1]] %in% var, 2]) +
-#     geom_text(x = 1, 
+#     geom_text(x = 1,
 #               y = var.labels$vline.label.y[var.labels[[1]] %in% var],
-#               label="Assassination", color="black") +
-#     ylim(0, var.labels$ylim.max[var.labels[[1]] %in% var])
-# })
+#               label="Assassination", color="blue") +
+#     ylim(var.labels$ylim.min[var.labels[[1]] %in% var], var.labels$ylim.max[var.labels[[1]] %in% var])
+# }
 # 
-# names(plot.loggdp_z.list) <- names(model.list)
-# 
-# lapply(names(plot.loggdp_z.list), function(var){
-#   ggsave(plot = plot.loggdp_z.list[[var]], filename = paste0(var, ".loggdp_z.png"), width = 15, height = 15, units = "cm")})
-# 
-# lapply(plot.loggdp_z.list, print)
-# ```
-# ```{r plotting-conflict_z}
-# plot.conflict_z.list <- lapply(names(model.list), function(var){
-#   predicted.values %>% filter(variable %in% var & moderator %in% c("conflict_z.low", "conflict_z.high")) %>%
-#     ggplot(aes(x = year_number, y = mean, group = moderator, color = moderator, linetype = moderator)) +
-#     geom_line(data = . %>% filter(after == 0 & moderator %in% "conflict_z.low")) +
-#     geom_line(data = . %>% filter(after == 1 & moderator %in% "conflict_z.low")) +
-#     geom_line(data = . %>% filter(after == 0 & moderator %in% "conflict_z.high")) +
-#     geom_line(data = . %>% filter(after == 1 & moderator %in% "conflict_z.high")) +
-#     geom_ribbon(aes(ymin = lower, ymax = upper), alpha =.1, colour = NA) +
-#     geom_vline(xintercept = 0, linetype="dotted", color = "blue") +
-#     theme_classic() +
-#     theme(text = element_text(size=16),
-#           axis.title.y = element_text(margin = margin(t = 0, r = 10, b = 0, l = 0)),
-#           axis.title.x = element_text(margin = margin(t = 10, r = , b = 0, l = 0)),
-#           legend.title = element_blank()) +
-#     xlab("Year to Event") +
-#     ylab(var.labels[var.labels[[1]] %in% var, 2]) +
-#     geom_text(x = 1, 
-#               y = var.labels$vline.label.y[var.labels[[1]] %in% var],
-#               label="Assassination", color="black") +
-#     ylim(0, var.labels$ylim.max[var.labels[[1]] %in% var])
-# })
-# 
-# names(plot.conflict_z.list) <- names(model.list)
-# 
-# lapply(names(plot.conflict_z.list), function(var){
-#   ggsave(plot = plot.conflict_z.list[[var]], filename = paste0(var, ".conflict_z.png"), width = 15, height = 15, units = "cm")})
-# 
-# lapply(plot.conflict_z.list, print)
+# PlotTwoModeratorsFun("rulingParty_dem", "pa")
+# PlotTwoModeratorsFun("rulingParty_dem", "na")
+# PlotTwoModeratorsFun("rulingParty_govapproval", "na")
+```
+
+```{r plotting-two-moderators-sbs}
+moderatorRef <- rbind(data.frame(moderator = "completed", value = c(0, 1), 
+                                 label = c("assasination not completed", "assasination completed")),
+                      data.frame(moderator = "dem", value = c(dem_lower, dem_higher), 
+                                 label = c(paste0("lower democracy(", round(dem_lower, 2), ")"), 
+                                           paste0("higher democracy(", round(dem_higher, 2), ")"))),
+                      data.frame(moderator = "govapproval", value = c(0, 1), 
+                                 label = c("disapprove of country leadership", "approve of country leadership")),
+                      data.frame(moderator = "male", value = c(0, 1), 
+                                 label = c("female", "male")),
+                      data.frame(moderator = "rulingParty", value = c(0, 1), 
+                                 label = c("target not in ruling party ", "target in ruling party ")),
+                      data.frame(moderator = "rulPartyChange", value = c(0, 1), 
+                                 label = c("ruling party not change", "ruling party change")),
+                      data.frame(moderator = "socialsupport", value = c(0, 1), 
+                                 label = c("don't have social support", "have social support")))
+
+
+PlotTwoModeratorsSBSFun <- function(mods, var){
+  moderators <- strsplit(mods, "_") %>% unlist
+  
+  predicted.values %>% filter(variable %in% var & moderator %in% mods) %>% 
+    separate(moderator, into = c("moderator1", "moderator2")) %>%
+    merge(moderatorRef, 
+          by.x = c("moderator1", moderators[1]), 
+          by.y = c("moderator", "value")) %>%
+    merge(moderatorRef, 
+          by.x = c("moderator2", moderators[2]), 
+          by.y = c("moderator", "value")) %>%
+    ggplot(aes(x = year_number, y = mean, group = label.x, color = label.x, linetype = label.x)) +
+    geom_line(data = . %>% filter(after == 1)) + 
+    geom_line(data = . %>% filter(after == 0)) + 
+    geom_ribbon(aes(ymin = lower, ymax = upper, fill = label.x), alpha =.1, colour = NA) +
+    geom_vline(xintercept = 0, linetype="dotted", color = "blue") +
+    theme_classic() +
+    theme(text = element_text(size=16),
+          axis.title.y = element_text(margin = margin(t = 0, r = 10, b = 0, l = 0)),
+          axis.title.x = element_text(margin = margin(t = 10, r = , b = 0, l = 0)),
+          legend.title = element_blank()) +
+    xlab("Year to Event") +
+    ylab(var.labels[var.labels[[1]] %in% var, 2]) +
+    geom_text(x = 1,
+              y = var.labels$vline.label.y[var.labels[[1]] %in% var],
+              label="Assassination", color="blue") +
+    ylim(var.labels$ylim.min[var.labels[[1]] %in% var], var.labels$ylim.max[var.labels[[1]] %in% var]) +
+    facet_wrap(~label.y, ncol = 2)
+}
+
+PlotTwoModeratorsSBSFun("rulingParty_dem", "pa")
+
+twomods_and_var <- lapply(list(completed_rulingParty.list, 
+                                  dem_rulingParty.list, 
+                                  govapproval_rulingParty.list), 
+                             function(x) {data.frame(mods = paste(x$moderator, collapse = "_"),
+                                                     var = names(x$model))}) %>% 
+                      bind_rows
+
+plot.TwoModerators.list <- mapply(PlotTwoModeratorsSBSFun, twomods_and_var$mods, twomods_and_var$var, SIMPLIFY = F)
+
+names(plot.TwoModerators.list) <- apply(twomods_and_var %>% relocate(var), 1, paste, collapse = ".")
+
+lapply(names(plot.TwoModerators.list), function(name){
+   ggsave(plot = plot.TwoModerators.list[[name]], filename = paste0(name, ".png"), width = 25, height = 15, units = "cm")})
+
 ```
